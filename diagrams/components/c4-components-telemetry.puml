@@ -1,0 +1,40 @@
+@startuml
+!include <C4/C4_Component>
+
+title Component Diagram — Telemetry Service\n[Домен: Telemetry]
+
+Container_Ext(gateway, "API Gateway", "Go / nginx", "Маршрутизирует входящие запросы.")
+ContainerDb_Ext(telemetryDb, "Telemetry DB", "TimescaleDB", "Временные ряды показаний датчиков.")
+Container_Ext(tempIntSvc, "Temperature Integration Service", "Go", "ACL над внешним Temperature API.")
+Container_Ext(mq, "Message Broker", "RabbitMQ", "Очередь событий телеметрии.")
+
+Container_Boundary(telemetrySvc, "Telemetry Service") {
+
+    Component(apiHandler, "REST API Handler", "Gin Router", "Принимает HTTP-запросы,\nвалидирует тело,\nмаршрутизирует к контроллерам.")
+
+    Component(ingestionCtrl, "Ingestion Controller", "Go", "Оркестрирует приём показания:\nобогащение → сохранение → событие.")
+
+    Component(queryCtrl, "Query Controller", "Go", "Возвращает текущее показание\nи историю показаний датчика.")
+
+    Component(tempEnricher, "Temperature Enricher", "Go", "Для показаний type=temperature\nзапрашивает актуальные данные\nиз Temperature Integration Service.")
+
+    Component(telemetryRepo, "Telemetry Repository", "Go / pgx", "Инкапсулирует SQL-запросы\nк TimescaleDB.")
+
+    Component(eventPublisher, "Event Publisher", "Go / amqp091", "Сериализует и публикует событие\nв обменник RabbitMQ.")
+}
+
+Rel(gateway, apiHandler, "POST /telemetry\nGET /telemetry/:sensorId", "HTTP")
+
+Rel(apiHandler, ingestionCtrl, "IngestReading")
+Rel(apiHandler, queryCtrl, "GetLatest / GetHistory")
+
+Rel(ingestionCtrl, tempEnricher, "Enrich", "если type=temperature")
+Rel(tempEnricher, tempIntSvc, "GET /temperature/:sensorId", "HTTP")
+Rel(ingestionCtrl, telemetryRepo, "Save")
+Rel(ingestionCtrl, eventPublisher, "Publish")
+Rel(queryCtrl, telemetryRepo, "FindLatest / FindHistory")
+
+Rel(telemetryRepo, telemetryDb, "Читает/пишет", "SQL / pgx")
+Rel(eventPublisher, mq, "publish telemetry.received", "AMQP")
+
+@enduml

@@ -1,0 +1,106 @@
+@startuml
+
+title ER-диаграмма — Smart Home Platform
+
+skinparam linetype ortho
+
+' ─── User Service ────────────────────────────────────────────────
+
+entity "User" as user {
+  * id : SERIAL <<PK>>
+  --
+  * email : VARCHAR(255)
+  * password_hash : VARCHAR(255)
+  * role : VARCHAR(50)
+  * created_at : TIMESTAMPTZ
+}
+
+entity "House" as house {
+  * id : SERIAL <<PK>>
+  --
+  * owner_id : INT <<FK>>
+  * name : VARCHAR(100)
+  * address : VARCHAR(255)
+  * created_at : TIMESTAMPTZ
+}
+
+entity "UserHouseAccess" as access {
+  * user_id : INT <<FK>>
+  * house_id : INT <<FK>>
+  --
+  * role : VARCHAR(50)
+}
+
+' ─── Device Registry Service ─────────────────────────────────────
+
+entity "DeviceType" as deviceType {
+  * id : SERIAL <<PK>>
+  --
+  * name : VARCHAR(50)
+  * unit : VARCHAR(20)
+}
+
+entity "Device" as device {
+  * id : SERIAL <<PK>>
+  --
+  * house_id : INT <<FK>>
+  * type_id : INT <<FK>>
+  * serial_number : VARCHAR(100)
+  * name : VARCHAR(100)
+  * location : VARCHAR(100)
+  * status : VARCHAR(20)
+  * created_at : TIMESTAMPTZ
+}
+
+' ─── Telemetry Service ───────────────────────────────────────────
+
+entity "TelemetryData" as telemetry {
+  * id : BIGSERIAL <<PK>>
+  --
+  * device_id : INT <<FK>>
+  * value : FLOAT
+  * unit : VARCHAR(20)
+  * status : VARCHAR(20)
+  * recorded_at : TIMESTAMPTZ
+}
+
+' ─── Notification Service ────────────────────────────────────────
+
+entity "AlertRule" as alertRule {
+  * id : SERIAL <<PK>>
+  --
+  * device_id : INT <<FK>>
+  * user_id : INT <<FK>>
+  * operator : VARCHAR(10)
+  * threshold : FLOAT
+  * channel : VARCHAR(50)
+  * created_at : TIMESTAMPTZ
+}
+
+entity "Notification" as notification {
+  * id : BIGSERIAL <<PK>>
+  --
+  * user_id : INT <<FK>>
+  * alert_rule_id : INT <<FK>>
+  * message : TEXT
+  * channel : VARCHAR(50)
+  * sent_at : TIMESTAMPTZ
+}
+
+' ─── Связи ───────────────────────────────────────────────────────
+
+user          ||--o{ house          : "owner_id"
+user          ||--o{ access         : "user_id"
+house         ||--o{ access         : "house_id"
+
+house         ||--o{ device         : "house_id"
+deviceType    ||--o{ device         : "type_id"
+
+device        ||--o{ telemetry      : "device_id"
+
+device        ||--o{ alertRule      : "device_id"
+user          ||--o{ alertRule      : "user_id"
+alertRule     ||--o{ notification   : "alert_rule_id"
+user          ||--o{ notification   : "user_id"
+
+@enduml

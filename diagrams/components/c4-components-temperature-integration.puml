@@ -1,0 +1,27 @@
+@startuml
+!include <C4/C4_Component>
+
+title Component Diagram — Temperature Integration Service\n[Домен: Temperature Integration / Anti-Corruption Layer]
+
+Container_Ext(telemetrySvc, "Telemetry Service", "Go", "Запрашивает температуру\nпо ID датчика и локации.")
+System_Ext(tempApi, "Temperature API", "Внешний HTTP-сервис", "Возвращает температурные\nданные во внешней модели.")
+
+Container_Boundary(tempIntSvc, "Temperature Integration Service") {
+
+    Component(apiHandler, "REST API Handler", "Gin Router", "Предоставляет внутренний API\nдля Telemetry Service.")
+
+    Component(queryHandler, "Temperature Query Handler", "Go", "Диспетчер запросов\nпо ID и по локации.")
+
+    Component(extApiClient, "External API Client", "Go / net/http", "HTTP-клиент для внешнего\nTemperature API.")
+
+    Component(responseMapper, "Response Mapper", "Go", "Транслирует внешнюю модель\nво внутреннюю доменную модель.")
+}
+
+Rel(telemetrySvc, apiHandler, "GET /temperature/:sensorId\nGET /temperature?location=", "HTTP")
+
+Rel(apiHandler, queryHandler, "GetByID / GetByLocation")
+Rel(queryHandler, extApiClient, "Fetch")
+Rel(extApiClient, tempApi, "GET /temperature/*", "HTTP")
+Rel(queryHandler, responseMapper, "Map")
+
+@enduml

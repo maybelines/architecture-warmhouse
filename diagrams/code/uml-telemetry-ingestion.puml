@@ -1,0 +1,26 @@
+@startuml
+
+title Telemetry Service — Ingestion Path
+
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+
+package "smarthome/telemetry" {
+    interface ReadingEnricher
+    interface TelemetryRepository
+    interface EventPublisher
+
+    class IngestionController
+    class TelemetryReading
+    class IngestReadingDTO
+    class TelemetryReceived
+}
+
+IngestionController --> TelemetryRepository : +uses
+IngestionController --> EventPublisher      : +uses
+IngestionController --> ReadingEnricher     : +uses
+IngestionController ..> IngestReadingDTO   : +receives
+IngestionController ..> TelemetryReading   : +creates
+IngestionController ..> TelemetryReceived  : +publishes
+
+@enduml

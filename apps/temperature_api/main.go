@@ -35,12 +35,34 @@ func handleTemperature(w http.ResponseWriter, r *http.Request) {
 
 	if path == "" {
 		location = r.URL.Query().Get("location")
-		if location == "" {
-			location = "unknown"
-		}
 	} else {
 		sensorID = path
-		location = "sensor-" + sensorID
+	}
+
+	if location == "" {
+		switch sensorID {
+		case "1":
+			location = "Living Room"
+		case "2":
+			location = "Bedroom"
+		case "3":
+			location = "Kitchen"
+		default:
+			location = "Unknown"
+		}
+	}
+
+	if sensorID == "" {
+		switch location {
+		case "Living Room":
+			sensorID = "1"
+		case "Bedroom":
+			sensorID = "2"
+		case "Kitchen":
+			sensorID = "3"
+		default:
+			sensorID = "0"
+		}
 	}
 
 	resp := TemperatureResponse{

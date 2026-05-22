@@ -1,0 +1,117 @@
+asyncapi: 2.6.0
+
+info:
+  title: Smart Home Platform — Async API
+  version: 1.0.0
+  description: |
+    AsyncAPI for asynchronous communication between microservices via RabbitMQ.
+
+    **Telemetry Service** publishes events after saving a sensor reading.
+    **Notification Service** subscribes to events and evaluates alert rules.
+
+servers:
+  production:
+    url: rabbitmq:5672
+    protocol: amqp
+    description: RabbitMQ Message Broker (smarthome-network)
+
+# ─── Channels ─────────────────────────────────────────────────────────────────
+
+channels:
+
+  telemetry.received:
+    description: |
+      Event published by Telemetry Service after successfully saving a sensor reading.
+      Notification Service subscribes to this channel, loads rules for the device_id
+      and sends a notification when the condition is met.
+
+    publish:
+      summary: Telemetry Service publishes an event for a new sensor reading
+      operationId: publishTelemetryReceived
+      bindings:
+        amqp:
+          exchange:
+            name: telemetry
+            type: topic
+            durable: true
+          routingKey: telemetry.received
+      message:
+        $ref: '#/components/messages/TelemetryReceived'
+
+    subscribe:
+      summary: Notification Service receives the event and evaluates alert rules
+      operationId: consumeTelemetryReceived
+      bindings:
+        amqp:
+          queue:
+            name: notification.telemetry.received
+            durable: true
+      message:
+        $ref: '#/components/messages/TelemetryReceived'
+
+# ─── Components ───────────────────────────────────────────────────────────────
+
+components:
+
+  messages:
+
+    TelemetryReceived:
+      name: TelemetryReceived
+      title: New sensor reading event
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TelemetryReceivedPayload'
+      examples:
+        - name: temperature_normal
+          summary: Reading within normal range
+          payload:
+            reading_id: 1001
+            device_id: 42
+            value: 22.1
+            unit: "°C"
+            status: active
+            occurred_at: "2026-05-12T10:05:00Z"
+
+        - name: temperature_exceeded
+          summary: Temperature exceeded threshold value
+          payload:
+            reading_id: 1002
+            device_id: 42
+            value: 28.5
+            unit: "°C"
+            status: active
+            occurred_at: "2026-05-12T14:30:00Z"
+
+  schemas:
+
+    TelemetryReceivedPayload:
+      type: object
+      required: [reading_id, device_id, value, unit, status, occurred_at]
+      properties:
+        reading_id:
+          type: integer
+          description: ID of the telemetry record in TimescaleDB
+          example: 1001
+        device_id:
+          type: integer
+          description: ID of the source device
+          example: 42
+        value:
+          type: number
+          format: float
+          description: Numeric value of the reading
+          example: 28.5
+        unit:
+          type: string
+          description: Unit of measurement
+          example: "°C"
+        status:
+          type: string
+          description: Device status at the time of measurement
+          enum: [active, inactive, error]
+          example: active
+        occurred_at:
+          type: string
+          format: date-time
+          description: Timestamp when the reading was recorded (UTC)
+          example: "2026-05-12T14:30:00Z"

@@ -1,0 +1,44 @@
+@startuml
+!include <C4/C4_Component>
+
+
+title Component Diagram — Device Registry Service\n[Домен: Device Registry]
+
+' ─── Внешние контейнеры ──────────────────────────────────────────
+
+Container_Ext(gateway, "API Gateway", "Go / nginx", "Маршрутизирует запросы\nна управление устройствами.")
+ContainerDb_Ext(deviceDb, "Device Registry DB", "PostgreSQL", "Реестр датчиков и устройств:\nname, type, location, unit, status.")
+
+' ─── Граница сервиса ─────────────────────────────────────────────
+
+Container_Boundary(deviceSvc, "Device Registry Service") {
+
+    Component(apiHandler, "REST API Handler", "Gin Router", "Принимает HTTP-запросы,\nвалидирует тело и параметры,\nмаршрутизирует по типу операции.")
+
+    Component(commandHandler, "Command Handler", "Go", "Обрабатывает команды изменения\nсостояния реестра.")
+
+    Component(queryHandler, "Query Handler", "Go", "Обрабатывает запросы на чтение.")
+
+    Component(stateManager, "Device State Manager", "Go", "Управляет допустимыми\nпереходами статуса устройства:\ninactive → active → error.")
+
+    Component(deviceRepo, "Device Repository", "Go / pgx", "CRUD-операции над таблицей\ndevices в PostgreSQL.")
+}
+
+' ─── Входящие запросы ────────────────────────────────────────────
+
+Rel(gateway, apiHandler, "GET/POST /devices\nGET/PUT/DELETE /devices/:id", "HTTP")
+
+' ─── Внутренние связи ────────────────────────────────────────────
+
+Rel(apiHandler, commandHandler, "CreateDevice(dto)\nUpdateDevice(id, dto)\nDeleteDevice(id)")
+Rel(apiHandler, queryHandler, "GetDevice(id)\nListDevices(filter)")
+
+Rel(commandHandler, stateManager, "ValidateTransition(current, next)")
+Rel(commandHandler, deviceRepo, "Create(device)\nUpdate(id, device)\nDelete(id)")
+Rel(queryHandler, deviceRepo, "FindByID(id)\nList(filter)")
+
+' ─── Исходящие вызовы ────────────────────────────────────────────
+
+Rel(deviceRepo, deviceDb, "INSERT / SELECT / UPDATE / DELETE", "SQL / pgx")
+
+@enduml

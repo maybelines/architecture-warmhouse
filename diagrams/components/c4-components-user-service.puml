@@ -1,0 +1,31 @@
+@startuml
+!include <C4/C4_Component>
+
+title Component Diagram — User Service\n[Домен: Identity & Access]
+
+Container_Ext(gateway, "API Gateway", "Go / nginx", "Маршрутизирует входящие\nзапросы, проверяет авторизацию.")
+ContainerDb_Ext(userDb, "User DB", "PostgreSQL", "Пользователи, роли,\nхеши паролей.")
+
+Container_Boundary(userSvc, "User Service") {
+
+    Component(apiHandler, "REST API Handler", "Gin Router", "Принимает HTTP-запросы,\nвалидирует тело,\nмаршрутизирует к контроллерам.")
+
+    Component(authCtrl, "Auth Controller", "Go", "Оркестрирует сценарии\nаутентификации.")
+
+    Component(tokenManager, "Token Manager", "Go", "Генерирует и валидирует\nтокены авторизации.")
+
+    Component(passwordHasher, "Password Hasher", "Go / bcrypt", "Хеширует и проверяет\nпароли пользователей.")
+
+    Component(userRepo, "User Repository", "Go / pgx", "CRUD-операции над\nтаблицей users.")
+}
+
+Rel(gateway, apiHandler, "POST /auth/register\nPOST /auth/login\nPOST /auth/refresh", "HTTP")
+
+Rel(apiHandler, authCtrl, "Register / Login")
+Rel(authCtrl, passwordHasher, "Hash / Verify")
+Rel(authCtrl, tokenManager, "Issue / Validate")
+Rel(authCtrl, userRepo, "Create / FindByEmail")
+
+Rel(userRepo, userDb, "Читает/пишет", "SQL / pgx")
+
+@enduml

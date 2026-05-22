@@ -1,0 +1,27 @@
+@startuml
+
+title Notification Service — Alert Rule Engine
+
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+
+package "smarthome/notification" {
+    abstract class AbstractAlertRule
+
+    interface AlertRuleRepository
+    interface NotificationDispatcher
+    interface NotificationHistoryRepository
+
+    class AlertRuleEngine
+    class TelemetryEvent
+    class Notification
+}
+
+AlertRuleEngine --> AlertRuleRepository           : +uses
+AlertRuleEngine --> NotificationDispatcher        : +uses
+AlertRuleEngine --> NotificationHistoryRepository : +uses
+AlertRuleEngine ..> TelemetryEvent               : +receives
+AlertRuleEngine ..> AbstractAlertRule            : +evaluates
+AlertRuleEngine ..> Notification                 : +creates
+
+@enduml

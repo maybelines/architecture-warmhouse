@@ -1,0 +1,405 @@
+openapi: 3.0.3
+
+info:
+  title: Smart Home Platform — REST API
+  description: |
+    REST API for synchronous communication between clients and microservices
+    of the Smart Home platform.
+    All protected endpoints require the `Authorization: Bearer <token>` header.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local (via API Gateway)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: User Service — authentication
+  - name: Devices
+    description: Device Registry Service — device management
+  - name: Telemetry
+    description: Telemetry Service — sensor reading ingestion
+  - name: Notifications
+    description: Notification Service — alert rule management
+
+# ─── Endpoints ────────────────────────────────────────────────────────────────
+
+paths:
+
+  # 1. Authentication
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate user
+      description: Returns an authorization token upon successful credential verification.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: user@example.com
+              password: secret123
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                expires_at: "2026-06-12T10:00:00Z"
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: invalid credentials
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # 2. Register device
+  /devices:
+    post:
+      tags: [Devices]
+      summary: Register a new device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCreate'
+            example:
+              house_id: 1
+              type_id: 2
+              name: Living Room Thermostat
+              serial_number: TH-2024-001
+              location: living_room
+      responses:
+        '201':
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              example:
+                id: 42
+                house_id: 1
+                type_id: 2
+                name: Living Room Thermostat
+                serial_number: TH-2024-001
+                location: living_room
+                status: inactive
+                created_at: "2026-05-12T10:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Device with this serial_number already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "device with serial_number TH-2024-001 already exists"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # 3. Get device by ID
+  /devices/{id}:
+    get:
+      tags: [Devices]
+      summary: Get device by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 42
+      responses:
+        '200':
+          description: Device data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+              example:
+                id: 42
+                house_id: 1
+                type_id: 2
+                name: Living Room Thermostat
+                serial_number: TH-2024-001
+                location: living_room
+                status: active
+                created_at: "2026-05-12T10:00:00Z"
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # 4. Ingest sensor reading
+  /telemetry:
+    post:
+      tags: [Telemetry]
+      summary: Ingest a sensor reading
+      description: |
+        Saves the reading to TimescaleDB and publishes a `telemetry.received`
+        event to RabbitMQ for asynchronous processing by the Notification Service.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TelemetryCreate'
+            example:
+              device_id: 42
+              value: 23.5
+              unit: "°C"
+              status: active
+      responses:
+        '201':
+          description: Reading saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryData'
+              example:
+                id: 1001
+                device_id: 42
+                value: 23.5
+                unit: "°C"
+                status: active
+                recorded_at: "2026-05-12T10:05:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: "device 42 not found"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # 5. Create alert rule
+  /alert-rules:
+    post:
+      tags: [Notifications]
+      summary: Create an alert rule
+      description: |
+        Creates a rule that triggers a notification when the sensor reading
+        meets the specified condition.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleCreate'
+            example:
+              device_id: 42
+              operator: GT
+              threshold: 25.0
+              channel: push
+      responses:
+        '201':
+          description: Alert rule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+              example:
+                id: 7
+                device_id: 42
+                user_id: 1
+                operator: GT
+                threshold: 25.0
+                channel: push
+                created_at: "2026-05-12T10:10:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+# ─── Components ───────────────────────────────────────────────────────────────
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Authorization token obtained via POST /auth/login
+
+  schemas:
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Authorization token
+        expires_at:
+          type: string
+          format: date-time
+
+    DeviceCreate:
+      type: object
+      required: [house_id, type_id, name, serial_number, location]
+      properties:
+        house_id:
+          type: integer
+        type_id:
+          type: integer
+        name:
+          type: string
+        serial_number:
+          type: string
+        location:
+          type: string
+
+    Device:
+      type: object
+      properties:
+        id:
+          type: integer
+        house_id:
+          type: integer
+        type_id:
+          type: integer
+        name:
+          type: string
+        serial_number:
+          type: string
+        location:
+          type: string
+        status:
+          type: string
+          enum: [inactive, active, error]
+        created_at:
+          type: string
+          format: date-time
+
+    TelemetryCreate:
+      type: object
+      required: [device_id, value, unit, status]
+      properties:
+        device_id:
+          type: integer
+        value:
+          type: number
+          format: float
+        unit:
+          type: string
+        status:
+          type: string
+
+    TelemetryData:
+      type: object
+      properties:
+        id:
+          type: integer
+        device_id:
+          type: integer
+        value:
+          type: number
+          format: float
+        unit:
+          type: string
+        status:
+          type: string
+        recorded_at:
+          type: string
+          format: date-time
+
+    AlertRuleCreate:
+      type: object
+      required: [device_id, operator, threshold, channel]
+      properties:
+        device_id:
+          type: integer
+        operator:
+          type: string
+          enum: [GT, LT, EQ, GTE, LTE]
+          description: "GT: >, LT: <, EQ: =, GTE: >=, LTE: <="
+        threshold:
+          type: number
+          format: float
+        channel:
+          type: string
+          enum: [push, email, webhook]
+
+    AlertRule:
+      type: object
+      properties:
+        id:
+          type: integer
+        device_id:
+          type: integer
+        user_id:
+          type: integer
+        operator:
+          type: string
+          enum: [GT, LT, EQ, GTE, LTE]
+        threshold:
+          type: number
+          format: float
+        channel:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: invalid request body
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: not found
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: internal server error

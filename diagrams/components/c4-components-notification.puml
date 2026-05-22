@@ -1,0 +1,38 @@
+@startuml
+!include <C4/C4_Component>
+
+title Component Diagram — Notification Service\n[Домен: Notification]
+
+Container_Ext(gateway, "API Gateway", "Go / nginx", "Маршрутизирует запросы\nна управление правилами алертов.")
+Container_Ext(mq, "Message Broker", "RabbitMQ", "Доставляет события\ntelemetry.received.")
+ContainerDb_Ext(notifDb, "Notification DB", "PostgreSQL", "Правила алертов\nи история уведомлений.")
+
+Container_Boundary(notifSvc, "Notification Service") {
+
+    Component(apiHandler, "REST API Handler", "Gin Router", "Принимает HTTP-запросы\nдля управления правилами\nи просмотра истории.")
+
+    Component(eventConsumer, "Event Consumer", "Go / amqp091", "Подписывается на очередь\ntelemetry.received.")
+
+    Component(alertRuleEngine, "Alert Rule Engine", "Go", "Загружает правила для датчика\nи проверяет условие срабатывания.")
+
+    Component(alertRuleRepo, "Alert Rule Repository", "Go / pgx", "CRUD правил алертов.")
+
+    Component(dispatcher, "Notification Dispatcher", "Go", "Выбирает канал доставки\nи отправляет уведомление.")
+
+    Component(notifHistoryRepo, "Notification History Repository", "Go / pgx", "Сохраняет историю\nотправленных уведомлений.")
+}
+
+Rel(gateway, apiHandler, "GET/POST /alert-rules\nGET /notifications", "HTTP")
+Rel(apiHandler, alertRuleRepo, "Create / FindAll / Delete")
+Rel(apiHandler, notifHistoryRepo, "FindAll")
+
+Rel(mq, eventConsumer, "deliver telemetry.received", "AMQP")
+Rel(eventConsumer, alertRuleEngine, "Evaluate")
+Rel(alertRuleEngine, alertRuleRepo, "FindBySensorID")
+Rel(alertRuleEngine, dispatcher, "Dispatch", "если правило сработало")
+Rel(dispatcher, notifHistoryRepo, "Save")
+
+Rel(alertRuleRepo, notifDb, "Читает/пишет", "SQL / pgx")
+Rel(notifHistoryRepo, notifDb, "Читает/пишет", "SQL / pgx")
+
+@enduml

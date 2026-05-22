@@ -1,0 +1,33 @@
+@startuml
+
+!include <C4/C4_Context>
+
+
+title Context Diagram — Smart Home System
+
+' ─── Люди / роли ───────────────────────────────────────────────
+
+Person(resident, "Пользователь", "Управляет устройствами\nи просматривает показания\nчерез HTTP-клиент или приложение")
+
+Person_Ext(admin, "Администратор", "Регистрирует и настраивает\nдатчики через REST API")
+
+' ─── Основная система ───────────────────────────────────────────
+
+System(smartHomeApp, "Smart Home App", "Монолитный Go-сервис (Gin).\nХранит данные датчиков, обогащает\nтемпературные показания из внешнего API\nи предоставляет REST API на порту 8080.")
+
+' ─── Внешние системы ────────────────────────────────────────────
+
+System_Ext(temperatureApi, "Temperature API", "Внешний HTTP-сервис.\nПредоставляет актуальные показания\nтемпературных датчиков по ID\nи по локации (порт 8081).")
+
+System_Ext(sensors, "Датчики", "IoT-устройства умного дома.\nПередают измеренные значения\n(температура и др.) в систему\nчерез REST API (PATCH /value).")
+
+' ─── Связи ──────────────────────────────────────────────────────
+
+Rel(resident, smartHomeApp, "Читает показания датчиков", "HTTPS / REST")
+Rel(admin, smartHomeApp, "Создаёт, обновляет,\nудаляет датчики", "HTTPS / REST")
+
+Rel(sensors, smartHomeApp, "Отправляют измерения\n(value + status)", "HTTP PATCH /sensors/:id/value")
+
+Rel(smartHomeApp, temperatureApi, "Запрашивает актуальную\nтемпературу по ID и локации", "HTTP GET /temperature")
+
+@enduml

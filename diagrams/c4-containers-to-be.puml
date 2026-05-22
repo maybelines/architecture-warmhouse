@@ -1,0 +1,73 @@
+@startuml
+!include <C4/C4_Container>
+
+
+title [To-Be] Container Diagram — Smart Home Microservices
+
+' ─── Акторы ─────────────────────────────────────────────────────
+
+Person(user, "Пользователь", "Просматривает показания\nчерез мобильное / веб-приложение.")
+Person(admin, "Администратор", "Управляет устройствами\nи правилами уведомлений.")
+System_Ext(sensors, "Датчики", "IoT-устройства умного дома.\nПушат измерения через REST.")
+System_Ext(tempApi, "Temperature API", "Внешний HTTP-сервис температур.")
+
+' ─── Граница платформы ───────────────────────────────────────────
+
+System_Boundary(smartHome, "Smart Home Platform") {
+
+    Container(gateway, "API Gateway", "Go / nginx", "Единая точка входа.\nПроверяет авторизацию, маршрутизирует\nзапросы к сервисам.")
+
+    ' ── Домен: Identity & Access ─────────────────────────────────
+    Container(userSvc, "User Service", "Go :8081", "Домен: Identity & Access.\nРегистрация, аутентификация,\nвыдача и проверка токенов авторизации.")
+    ContainerDb(userDb, "User DB", "PostgreSQL", "Пользователи, роли,\nхеши паролей, сессии.")
+
+    ' ── Домен: Device Registry ───────────────────────────────────
+    Container(deviceSvc, "Device Registry Service", "Go :8082", "Домен: Device Registry.\nCRUD метаданных устройств:\nname, type, location, unit, status.")
+    ContainerDb(deviceDb, "Device Registry DB", "PostgreSQL", "Реестр датчиков и устройств.")
+
+    ' ── Домен: Telemetry ─────────────────────────────────────────
+    Container(telemetrySvc, "Telemetry Service", "Go :8083", "Домен: Telemetry.\nПриём показаний от датчиков.\nОбогащение температурных данных.\nПубликация событий в брокер.")
+    ContainerDb(telemetryDb, "Telemetry DB", "TimescaleDB", "Временные ряды показаний\nдатчиков (гипертаблица).")
+
+    ' ── Домен: Temperature Integration (ACL) ─────────────────────
+    Container(tempIntSvc, "Temperature Integration Service", "Go :8084", "Домен: Temperature Integration.\nAnti-Corruption Layer.\nТранслирует модель внешнего API\nво внутреннее представление.")
+
+    ' ── Домен: Notification ──────────────────────────────────────
+    Container(notifSvc, "Notification Service", "Go :8085", "Домен: Notification.\nПодписка на события телеметрии.\nПроверка пороговых правил.\nОтправка уведомлений.")
+    ContainerDb(notifDb, "Notification DB", "PostgreSQL", "Правила алертов\nи история уведомлений.")
+
+    ' ── Инфраструктура ───────────────────────────────────────────
+    Container(mq, "Message Broker", "RabbitMQ", "Асинхронная доставка событий\nмежду Telemetry Service\nи Notification Service.")
+}
+
+' ─── Входящий трафик ─────────────────────────────────────────────
+
+Rel(user, gateway, "REST-запросы", "HTTPS")
+Rel(admin, gateway, "REST-запросы", "HTTPS")
+Rel(sensors, gateway, "Отправляют показания", "HTTP")
+
+' ─── Gateway → Сервисы ───────────────────────────────────────────
+
+Rel(gateway, userSvc, "POST /auth/login\nPOST /auth/register", "HTTP")
+Rel(gateway, deviceSvc, "GET/POST/PUT/DELETE /devices", "HTTP")
+Rel(gateway, telemetrySvc, "POST /telemetry\nGET /telemetry/:sensorId", "HTTP")
+Rel(gateway, notifSvc, "GET/POST /alert-rules\nGET /notifications", "HTTP")
+
+' ─── Сервис → своя БД ────────────────────────────────────────────
+
+Rel(userSvc, userDb, "Читает/пишет", "SQL / pgx")
+Rel(deviceSvc, deviceDb, "Читает/пишет", "SQL / pgx")
+Rel(telemetrySvc, telemetryDb, "Сохраняет показания", "SQL / pgx")
+Rel(notifSvc, notifDb, "Читает правила,\nпишет историю", "SQL / pgx")
+
+' ─── Межсервисное взаимодействие ─────────────────────────────────
+
+Rel(telemetrySvc, tempIntSvc, "Обогатить показание\n(type=temperature)", "HTTP")
+Rel(tempIntSvc, tempApi, "GET /temperature/:id\nGET /temperature?location=", "HTTP")
+
+' ─── Асинхронное взаимодействие ──────────────────────────────────
+
+Rel(telemetrySvc, mq, "publish: telemetry.received", "AMQP")
+Rel(notifSvc, mq, "subscribe: telemetry.received", "AMQP")
+
+@enduml
